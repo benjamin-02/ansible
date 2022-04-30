@@ -1,0 +1,9 @@
+---
+- name: add docker repos
+  hosts: _test_ans
+  become: true
+  tasks:
+    - name: download docker repository file
+      get_url: 
+        url: https://download.docker.com/linux/rhel/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
