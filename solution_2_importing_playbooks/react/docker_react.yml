@@ -4,7 +4,7 @@
     - amazon.aws.ec2_metadata_facts:
       # to use the public ip of nodejs in react .env file
   
-- name: Install docker
+- name: configure react instance
   gather_facts: No
   any_errors_fatal: true
   hosts: _ansible_react
@@ -32,7 +32,7 @@
       
     - name: copy the Dockerfile
       copy:
-        src: solution_1_seperate_playbooks/react/Dockerfile
+        src: ansible-project/solution_2_importing_playbooks/react/Dockerfile
         dest: /home/ec2-user/react
     - name: remove ben_react container and benbenjamin/react image if exists
       shell: "docker ps -q --filter 'name=ben_react' | grep -q . && docker stop ben_react && docker rm -fv ben_react && docker image rm -f benbenjamin/react || echo 'Not Found'"

@@ -36,7 +36,7 @@
 
     - name: copy the dockerfile
       copy: 
-        src: solution_2_importing_playbooks/nodejs/Dockerfile
+        src: ansible-project/solution_2_importing_playbooks/nodejs/Dockerfile
         dest: /home/ec2-user/nodejs
 
     - name: remove container and image if exist

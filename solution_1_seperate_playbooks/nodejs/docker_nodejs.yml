@@ -68,7 +68,7 @@
 
     - name: copy files to nodejs node
       copy: 
-        src: /home/ec2-user/given_files/todo-app-pern/server/
+        src: ansible-project/given_files/todo-app-pern/server/
         # src: -> If src path is a directory, it is copied recursively. In this case, if path ends with “/”, 
         # only inside contents of that directory are copied to destination. 
         # Otherwise, if it does not end with “/”, the directory itself with all contents is copied. 
@@ -85,7 +85,7 @@
 
     - name: copy the dockerfile
       copy: 
-        src: /home/ec2-user/solution_1_seperate_playbooks/nodejs/Dockerfile
+        src: ansible-project/solution_1_seperate_playbooks/nodejs/Dockerfile
         dest: /home/ec2-user/nodejs
 
     - name: remove container and image if exist
