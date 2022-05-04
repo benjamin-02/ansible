@@ -21,7 +21,7 @@
         mode: '0755'
     - name: copy files to the react node
       copy:
-        src: given_files/todo-app-pern/client/
+        src: ../../given_files/todo-app-pern/client/
         dest: /home/ec2-user/react/
     - debug:
         msg: "{{ nodejs_public_ip }}"
@@ -32,7 +32,7 @@
       
     - name: copy the Dockerfile
       copy:
-        src: ansible-project/solution_2_importing_playbooks/react/Dockerfile
+        src: Dockerfile
         dest: /home/ec2-user/react
     - name: remove ben_react container and benbenjamin/react image if exists
       shell: "docker ps -q --filter 'name=ben_react' | grep -q . && docker stop ben_react && docker rm -fv ben_react && docker image rm -f benbenjamin/react || echo 'Not Found'"

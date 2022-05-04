@@ -69,12 +69,12 @@
       
     - name: copy the sql script
       copy:
-        src: ansible-project/given_files/todo-app-pern/database/init.sql
+        src: ../../given_files/todo-app-pern/database/init.sql
         dest: /home/ec2-user/postgresql
 
     - name: copy dockerfile
       copy: 
-        src: ansible-project/solution_1_seperate_playbooks/postgres/Dockerfile
+        src: Dockerfile
         dest: /home/ec2-user/postgresql
 
     - name: remove container and image if exist

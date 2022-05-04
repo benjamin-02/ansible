@@ -1,0 +1,235 @@
+#################### 1.Play: Install Docker #####################
+- name: Docker Installation
+  hosts: _development
+  # we need docker on all of our instances. thats why we used _development group
+  become: true
+  tasks:
+    - name: update packages
+      yum:
+        name: "*"
+        state: latest
+    
+    - name: uninstall older docker version
+      yum:
+        name: "{{ item }}"
+        state: removed
+      loop:
+        - docker
+        - docker-client
+        - docker-client-latest
+        - docker-common
+        - docker-latest
+        - docker-latest-logrotate
+        - docker-logrotate
+        - docker-engine
+
+    - name: download docker repository file
+      get_url: 
+        # url: https://download.docker.com/linux/rhel/docker-ce.repo
+        # With the release of RHEL 8, docker package has been removed 
+        # from their default package repositories, docker has been 
+        # replaced with podman and buildah.
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+
+    - name: install docker engine
+      yum:
+        name: docker-ce
+        state: latest
+
+    - name: Install pip
+      yum: 
+        name: python3-pip
+        state: present
+        
+    - name: Install docker sdk
+      pip:
+        name: docker
+    
+    - name: add ec2-user to docker group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    
+    - name: start docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+#################### 2.Play: Configure DB Node #####################
+
+- name: configure postgresql node
+  hosts: _ansible_postgresql
+  become: true
+  vars_files:
+    - secret.yml
+  tasks:
+    - name: create build directory
+      ansible.builtin.file:
+        path: /home/ec2-user/postgresql
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      
+    - name: copy the sql script
+      copy:
+        src: ../given_files/todo-app-pern/database/init.sql
+        dest: /home/ec2-user/postgresql
+
+    - name: copy dockerfile
+      copy: 
+        src: postgres/Dockerfile
+        dest: /home/ec2-user/postgresql
+
+    - name: remove container and image if exist
+      shell: "docker ps -q --filter 'name=ben_postgres' && docker stop ben_postgres && docker rm -fv ben_postgres && docker image rm -f benbenjamin/postgres || echo 'Not Found'"
+
+    - name: build container image
+      docker_image:
+        name: benbenjamin/postgres
+        build:
+          path: /home/ec2-user/postgresql
+        source: build
+        state: present     
+
+    - name: create postgresql docker container
+      docker_container:
+        name: ben_postgres
+        image: benbenjamin/postgres
+        state: started
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ password }}"
+        volumes:
+          - /db-data:/var/lib/postgresql/data
+      register: container_info
+
+    - name: print the container info
+      debug:
+        var: container_info
+
+#################### 3.Play: Configure Nodejs #####################
+
+- name: Gather facts from _ansible_postgresql
+  hosts: _ansible_postgresql
+  tasks: [ ]
+  # this is a no-op (dummy) task. we only need to get the private ip of postgresql
+
+- name: configure nodejs instance
+  hosts: _ansible_nodejs
+  become: true
+  vars:
+    db_private_ip: "{{ hostvars[groups['_ansible_postgresql'][0]]['ansible_eth0']['ipv4']['address'] }}"
+  tasks: 
+    - name: create build directory
+      file:
+        path: /home/ec2-user/nodejs
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: copy files to nodejs node
+      copy: 
+        src: ../given_files/todo-app-pern/server/
+        # src: -> If src path is a directory, it is copied recursively. In this case, if path ends with “/”, 
+        # only inside contents of that directory are copied to destination. 
+        # Otherwise, if it does not end with “/”, the directory itself with all contents is copied. 
+        # This behavior is similar to the rsync command line tool.
+        dest: /home/ec2-user/nodejs/
+        # dest: -> If src is a directory, this must be a directory too.
+        # If dest is a non-existent path and if either dest ends with “/” or src is a directory, 
+        # dest is created.
+
+    - name: write DB's private ip to the .env file
+      shell: sed -i 's/DB_HOST=<private ip of postgres>/DB_HOST={{ db_private_ip }}/g' /home/ec2-user/nodejs/.env
+      # dont use here quotes around {{ }}. firstly, we dont want quotes in our .env files
+      # secondly, shell module does not need quotes around jinja variable. 
+
+    - name: copy the dockerfile
+      copy: 
+        src: nodejs/Dockerfile
+        dest: /home/ec2-user/nodejs
+
+    - name: remove container and image if exist
+      shell: "docker ps -q --filter 'name=ben_nodejs' && docker stop ben_nodejs && docker rm -fv ben_nodejs && docker image rm -f benbenjamin/nodejs || echo 'Not Found'"
+
+    - name: build container image
+      docker_image:
+        name: benbenjamin/nodejs
+        build:
+          path: /home/ec2-user/nodejs
+        source: build
+        state: present
+
+    - name: create nodejs docker container
+      docker_container:
+        name: ben_nodejs
+        image: benbenjamin/nodejs
+        state: started
+        ports:
+          - "5000:5000"
+      register: container_info
+
+    - name: print the container info
+      debug:
+        var: container_info
+
+#################### 4.Play: Configure React Node #####################
+
+- name: Gather aws ec2 facts from _ansible_nodejs
+  hosts: _ansible_nodejs
+  tasks: 
+    - amazon.aws.ec2_metadata_facts:
+      # to use the public ip of nodejs in react .env file
+  
+- name: configure react node
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _ansible_react
+  become: true
+  vars:
+    nodejs_public_ip: "{{ hostvars[groups['_ansible_nodejs'][0]]['ansible_ec2_public_ipv4'] }}"
+  tasks:
+    - name: create build directory
+      file:
+        path: /home/ec2-user/react
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: copy files to the react node
+      copy:
+        src: ../given_files/todo-app-pern/client/
+        dest: /home/ec2-user/react/
+    - debug:
+        msg: "{{ nodejs_public_ip }}"
+    - name: write nodejs' public ip to the .env file
+      shell: sed -i 's/<public ip of nodejs>/{{ nodejs_public_ip }}/g' /home/ec2-user/react/.env  
+      # dont use here quotes around {{ }}. firstly, we dont want quotes in our .env files
+      # secondly, shell module does not need quotes around jinja variable. 
+      
+    - name: copy the Dockerfile
+      copy:
+        src: react/Dockerfile
+        dest: /home/ec2-user/react
+    - name: remove ben_react container and benbenjamin/react image if exists
+      shell: "docker ps -q --filter 'name=ben_react' | grep -q . && docker stop ben_react && docker rm -fv ben_react && docker image rm -f benbenjamin/react || echo 'Not Found'"
+    - name: build container image
+      docker_image:
+        name: benbenjamin/react
+        build:
+          path: /home/ec2-user/react
+        source: build
+        state: present
+    - name: Launch react docker container
+      docker_container:
+        name: ben_react
+        image: benbenjamin/react
+        state: started
+        ports:
+        - "3000:3000"
