@@ -74,7 +74,7 @@
 
     - name: copy dockerfile
       copy: 
-        src: /home/ec2-user/ansible_project/postgres/Dockerfile
+        src: /home/ec2-user/solution_1_seperate_playbooks/postgres/Dockerfile
         dest: /home/ec2-user/postgresql
 
     - name: remove container and image if exist

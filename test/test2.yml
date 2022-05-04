@@ -1,6 +1,0 @@
---- 
-- name: connectivity test
-  hosts: _test_ans
-  tasks: 
-    - name: ping test 
-      ping:

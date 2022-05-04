@@ -1,0 +1,52 @@
+---
+- name: configure postgresql node
+  hosts: _ansible_postgresql
+  become: true
+  vars_files:
+    - secret.yml
+  tasks:
+    - name: create build directory
+      ansible.builtin.file:
+        path: /home/ec2-user/postgresql
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      
+    - name: copy the sql script
+      copy:
+        src: given_files/todo-app-pern/database/init.sql
+        dest: /home/ec2-user/postgresql
+
+    - name: copy dockerfile
+      copy: 
+        src: solution_2_importing_playbooks/postgres/Dockerfile
+        dest: /home/ec2-user/postgresql
+
+    - name: remove container and image if exist
+      shell: "docker ps -q --filter 'name=ben_postgres' && docker stop ben_postgres && docker rm -fv ben_postgres && docker image rm -f benbenjamin/postgres || echo 'Not Found'"
+
+    - name: build container image
+      docker_image:
+        name: benbenjamin/postgres
+        build:
+          path: /home/ec2-user/postgresql
+        source: build
+        state: present     
+
+    - name: create postgresql docker container
+      docker_container:
+        name: ben_postgres
+        image: benbenjamin/postgres
+        state: started
+        ports:
+          - "5432:5432"
+        env:
+          POSTGRES_PASSWORD: "{{ password }}"
+        volumes:
+          - /db-data:/var/lib/postgresql/data
+      register: container_info
+
+    - name: print the container info
+      debug:
+        var: container_info

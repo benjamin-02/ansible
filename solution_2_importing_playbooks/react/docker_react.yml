@@ -1,0 +1,52 @@
+- name: Gather aws ec2 facts from _ansible_nodejs
+  hosts: _ansible_nodejs
+  tasks: 
+    - amazon.aws.ec2_metadata_facts:
+      # to use the public ip of nodejs in react .env file
+  
+- name: Install docker
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _ansible_react
+  become: true
+  vars:
+    nodejs_public_ip: "{{ hostvars[groups['_ansible_nodejs'][0]]['ansible_ec2_public_ipv4'] }}"
+  tasks:
+    - name: create build directory
+      file:
+        path: /home/ec2-user/react
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: copy files to the react node
+      copy:
+        src: given_files/todo-app-pern/client/
+        dest: /home/ec2-user/react/
+    - debug:
+        msg: "{{ nodejs_public_ip }}"
+    - name: write nodejs' public ip to the .env file
+      shell: sed -i 's/<public ip of nodejs>/{{ nodejs_public_ip }}/g' /home/ec2-user/react/.env  
+      # dont use here quotes around {{ }}. firstly, we dont want quotes in our .env files
+      # secondly, shell module does not need quotes around jinja variable. 
+      
+    - name: copy the Dockerfile
+      copy:
+        src: solution_1_seperate_playbooks/react/Dockerfile
+        dest: /home/ec2-user/react
+    - name: remove ben_react container and benbenjamin/react image if exists
+      shell: "docker ps -q --filter 'name=ben_react' | grep -q . && docker stop ben_react && docker rm -fv ben_react && docker image rm -f benbenjamin/react || echo 'Not Found'"
+    - name: build container image
+      docker_image:
+        name: benbenjamin/react
+        build:
+          path: /home/ec2-user/react
+        source: build
+        state: present
+    - name: Launch react docker container
+      docker_container:
+        name: ben_react
+        image: benbenjamin/react
+        state: started
+        ports:
+        - "3000:3000"

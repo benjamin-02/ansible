@@ -1,6 +1,13 @@
+- name: Gather facts from _ansible_postgresql
+  hosts: _ansible_postgresql
+  tasks: [ ]
+  # this is a no-op (dummy) task. we only need to get the private ip of postgresql
+
 - name: configure nodejs instance
   hosts: _ansible_nodejs
   become: true
+  vars:
+    db_private_ip: "{{ hostvars[groups['_ansible_postgresql'][0]]['ansible_eth0']['ipv4']['address'] }}"
   tasks: 
     - name: update packages
       yum: 
@@ -61,19 +68,24 @@
 
     - name: copy files to nodejs node
       copy: 
-        src: /home/ec2-user/given_files/todo-app-pern/server
+        src: /home/ec2-user/given_files/todo-app-pern/server/
         # src: -> If src path is a directory, it is copied recursively. In this case, if path ends with “/”, 
         # only inside contents of that directory are copied to destination. 
         # Otherwise, if it does not end with “/”, the directory itself with all contents is copied. 
         # This behavior is similar to the rsync command line tool.
-        dest: /home/ec2-user/nodejs
+        dest: /home/ec2-user/nodejs/
         # dest: -> If src is a directory, this must be a directory too.
         # If dest is a non-existent path and if either dest ends with “/” or src is a directory, 
         # dest is created.
 
+    - name: write DB's private ip to the .env file
+      shell: sed -i 's/DB_HOST=<private ip of postgres>/DB_HOST={{ db_private_ip }}/g' /home/ec2-user/nodejs/.env
+      # dont use here quotes around {{ }}. firstly, we dont want quotes in our .env files
+      # secondly, shell module does not need quotes around jinja variable. 
+
     - name: copy the dockerfile
       copy: 
-        src: /home/ec2-user/ansible_project/nodejs/Dockerfile
+        src: /home/ec2-user/solution_1_seperate_playbooks/nodejs/Dockerfile
         dest: /home/ec2-user/nodejs
 
     - name: remove container and image if exist
@@ -87,7 +99,7 @@
         source: build
         state: present
 
-    - name: create postgresql docker container
+    - name: create nodejs docker container
       docker_container:
         name: ben_nodejs
         image: benbenjamin/nodejs
@@ -98,4 +110,4 @@
 
     - name: print the container info
       debug:
-        var: container_info\
+        var: container_info

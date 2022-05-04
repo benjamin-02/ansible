@@ -1,0 +1,104 @@
+- name: Gather aws ec2 facts from _ansible_nodejs
+  hosts: _ansible_nodejs
+  tasks: 
+    - amazon.aws.ec2_metadata_facts:
+      # to use the public ip of nodejs in react .env file
+  
+- name: Install docker
+  gather_facts: No
+  any_errors_fatal: true
+  hosts: _ansible_react
+  become: true
+  vars:
+    nodejs_public_ip: "{{ hostvars[groups['_ansible_nodejs'][0]]['ansible_ec2_public_ipv4'] }}"
+  tasks:
+    - name: upgrade all packages
+      yum: 
+        name: '*'
+        state: latest
+    # we may need to uninstall any existing docker files from the centos repo first.
+    - name: Remove docker if installed from CentOS repo
+      yum:
+        name: "{{ item }}"
+        state: removed
+      with_items:
+        - docker
+        - docker-client
+        - docker-client-latest
+        - docker-common
+        - docker-latest
+        - docker-latest-logrotate
+        - docker-logrotate
+        - docker-engine
+    - name: Install yum utils
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - yum-utils
+        - device-mapper-persistent-data
+        - lvm2
+    - name: Add Docker repo
+      get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docer-ce.repo
+    - name: Install Docker
+      package:
+        name: docker-ce
+        state: latest
+    - name: Install pip
+      package:
+        name: python3-pip
+        state: present
+        update_cache: true
+    - name: Install docker sdk
+      pip:
+        name: docker
+    - name: Add user ec2-user to docker group
+      user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    - name: Start Docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+    - name: create build directory
+      file:
+        path: /home/ec2-user/react
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    - name: copy files to the react node
+      copy:
+        src: /home/ec2-user/given_files/todo-app-pern/client/
+        dest: /home/ec2-user/react/
+    - debug:
+        msg: "{{ nodejs_public_ip }}"
+    - name: write nodejs' public ip to the .env file
+      shell: sed -i 's/<public ip of nodejs>/{{ nodejs_public_ip }}/g' /home/ec2-user/react/.env  
+      # dont use here quotes around {{ }}. firstly, we dont want quotes in our .env files
+      # secondly, shell module does not need quotes around jinja variable. 
+      
+    - name: copy the Dockerfile
+      copy:
+        src: /home/ec2-user/solution_1_seperate_playbooks/react/Dockerfile
+        dest: /home/ec2-user/react
+    - name: remove ben_react container and benbenjamin/react image if exists
+      shell: "docker ps -q --filter 'name=ben_react' | grep -q . && docker stop ben_react && docker rm -fv ben_react && docker image rm -f benbenjamin/react || echo 'Not Found'"
+    - name: build container image
+      docker_image:
+        name: benbenjamin/react
+        build:
+          path: /home/ec2-user/react
+        source: build
+        state: present
+    - name: Launch react docker container
+      docker_container:
+        name: ben_react
+        image: benbenjamin/react
+        state: started
+        ports:
+        - "3000:3000"

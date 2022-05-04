@@ -1,0 +1,58 @@
+- name: Docker Installation
+  hosts: _development
+  # we need docker on all of our instances. thats why we used _development group
+  become: true
+  tasks:
+    - name: update packages
+      yum:
+        name: "*"
+        state: latest
+    
+    - name: uninstall older docker version
+      yum:
+        name: "{{ item }}"
+        state: removed
+      loop:
+        - docker
+        - docker-client
+        - docker-client-latest
+        - docker-common
+        - docker-latest
+        - docker-latest-logrotate
+        - docker-logrotate
+        - docker-engine
+
+    - name: download docker repository file
+      get_url: 
+        # url: https://download.docker.com/linux/rhel/docker-ce.repo
+        # With the release of RHEL 8, docker package has been removed 
+        # from their default package repositories, docker has been 
+        # replaced with podman and buildah.
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+
+    - name: install docker engine
+      yum:
+        name: docker-ce
+        state: latest
+
+    - name: Install pip
+      yum: 
+        name: python3-pip
+        state: present
+        
+    - name: Install docker sdk
+      pip:
+        name: docker
+    
+    - name: add ec2-user to docker group
+      ansible.builtin.user:
+        name: ec2-user
+        groups: docker
+        append: yes
+    
+    - name: start docker service
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
