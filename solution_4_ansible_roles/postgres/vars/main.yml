@@ -1,0 +1,5 @@
+---
+# vars file for postgres
+postgres_path: /home/ec2-user/postgresql
+container_name: ben_postgres
+image_name: benbenjamin/postgres

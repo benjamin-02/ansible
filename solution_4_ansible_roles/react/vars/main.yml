@@ -1,0 +1,5 @@
+---
+# vars file for react
+react_path: /home/ec2-user/react
+image_name: benbenjamin/react
+container_name: ben_react
